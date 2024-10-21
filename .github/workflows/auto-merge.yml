@@ -132,50 +132,12 @@ jobs:
               echo "PR #$PR_NUMBER is invalid. Adding comment and label."
               gh pr edit $PR_NUMBER --add-label "waiting room"
               REASONS=$(echo -e "$REASONS" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-              gh pr comment $PR_NUMBER --body "This pull request does not meet the required structure or rules. Please address the following issues:\n$REASONS"
+              gh pr comment $PR_NUMBER --body-file - <<EOF
+              This pull request does not meet the required structure or rules. Please address the following issues:
+              $REASONS
+              EOF
             fi
           done  
         env:
           GH_TOKEN: ${{ secrets.PAT }}
 
-      - name: Add open-odyssey label
-        run: |
-          gh pr edit ${{ github.event.pull_request.number }} --add-label "open-odyssey" 
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
-          
-      - name: Auto-merge pull request
-        if: steps.check_pr.outputs.valid == 'true'
-        
-        run: |
-          # Check if "waiting room" label exists and remove it
-          if gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name' | grep -q "waiting room"; then
-            echo "Removing 'waiting room' label"
-            gh pr edit ${{ github.event.pull_request.number }} --remove-label "waiting room"
-          fi
-          
-          # Add "dino-accepted" label
-          gh pr edit ${{ github.event.pull_request.number }} --add-label "dino-accepted"
-          
-          # Attempt to merge the PR
-          gh pr merge ${{ github.event.pull_request.number }} --auto --merge
-        env:
-          GH_TOKEN: ${{ secrets.PAT }}
-
-      - name: Label on invalid PR
-        if: steps.check_pr.outputs.valid == 'false'
-        run: |
-          gh pr edit ${{ github.event.pull_request.number }} --add-label "waiting room"
-        env:
-          GH_TOKEN: ${{ secrets.PAT }}
-
-      - name: Comment on invalid PR
-        if: steps.check_pr.outputs.valid == 'false' && steps.check_pr.outputs.reasons != ''
-        run: |
-          REASONS=$(echo -e "${{ steps.check_pr.outputs.reasons }}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-          gh pr comment ${{ github.event.pull_request.number }} --body-file - <<EOF
-          This pull request does not meet the required structure or rules. Please address the following issues:
-          $REASONS
-          EOF
-        env:
-          GH_TOKEN: ${{ secrets.PAT }}
