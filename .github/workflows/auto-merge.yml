@@ -132,6 +132,7 @@ jobs:
               echo "PR #$PR_NUMBER is invalid. Adding comment and label."
               gh pr edit $PR_NUMBER --add-label "waiting room"
               # Use the predefined comment with the reasons inserted
+              REASONS=$(echo -e "$REASONS" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
               COMMENT="${INVALID_PR_COMMENT/\$REASONS/$REASONS}"
               
               # Add the comment using a here-string
@@ -141,7 +142,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PAT }}
           INVALID_PR_COMMENT: |
-            ## ⚠️ Pull Request Does Not Meet Requirements
+            ## ⚠️ Welcome to PR waiting room
             
             Thank you for your contribution! However, this pull request does not meet the required structure or rules. Please address the following issues:
             
