@@ -5,7 +5,9 @@ on:
 
   schedule:
     - cron: '0 18 * * *'  # 12 AM midnight in IST (18:00 UTC)
-    - cron: '0 6 * * *'   # 12 PM afternoon in IST (6:00 UTC)
+    - cron: '0 0 * * *'   # 6 AM afternoon in IST (00:00 UTC)
+    - cron: '0 6 * * *'  # 12 PM midnight in IST (6:00 UTC)
+    - cron: '0 12 * * *'   # 6 PM afternoon in IST (12:00 UTC)
 
 permissions:
   contents: read
