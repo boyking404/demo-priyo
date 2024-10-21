@@ -34,19 +34,20 @@ jobs:
           gh pr list --state open
           
           echo "Attempting to get PR numbers:"
-          PR_LIST=$(gh pr list --state open --json number --jq '.[].number' || echo "")
+          PR_LIST=$(gh pr list --state open --json number --jq '.[].number' | tr '\n' ' ' || echo "")
           echo "Raw PR_LIST output: $PR_LIST"
           
           if [ -z "$PR_LIST" ]; then
             echo "No PRs found or error occurred."
-            echo "pr_count=0" >> $GITHUB_OUTPUT
+            echo "pr_count=0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           
-          echo "pr_list=$PR_LIST" >> $GITHUB_OUTPUT
+          # Use printf to ensure correct formatting
+          printf "pr_list=%s\n" "$PR_LIST" >> "$GITHUB_OUTPUT"
           PR_COUNT=$(echo "$PR_LIST" | wc -w)
           echo "PR count: $PR_COUNT"
-          echo "pr_count=$PR_COUNT" >> $GITHUB_OUTPUT
+          printf "pr_count=%d\n" "$PR_COUNT" >> "$GITHUB_OUTPUT"
           
           if [ "$PR_COUNT" -eq 0 ]; then
             echo "No open PRs found. Exiting workflow."
@@ -54,6 +55,11 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ secrets.PAT }}
+
+      - name: Debug output
+        run: |
+          echo "PR List: ${{ steps.get_prs.outputs.pr_list }}"
+          echo "PR Count: ${{ steps.get_prs.outputs.pr_count }}"
 
       - name: Process PRs
         if: steps.get_prs.outputs.pr_count > 0
