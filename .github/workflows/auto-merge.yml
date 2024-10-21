@@ -131,13 +131,28 @@ jobs:
             else
               echo "PR #$PR_NUMBER is invalid. Adding comment and label."
               gh pr edit $PR_NUMBER --add-label "waiting room"
-              REASONS=$(echo -e "$REASONS" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-              gh pr comment $PR_NUMBER --body-file - <<EOF
-              This pull request does not meet the required structure or rules. Please address the following issues:
-              $REASONS
-              EOF
+              # Use the predefined comment with the reasons inserted
+              COMMENT="${INVALID_PR_COMMENT/\$REASONS/$REASONS}"
+              
+              # Add the comment using a here-string
+              gh pr comment $PR_NUMBER --body "$COMMENT"
             fi
           done  
         env:
           GH_TOKEN: ${{ secrets.PAT }}
+          INVALID_PR_COMMENT: |
+            ## ⚠️ Pull Request Does Not Meet Requirements
+            
+            Thank you for your contribution! However, this pull request does not meet the required structure or rules. Please address the following issues:
+            
+            $REASONS
+            
+            ### Next Steps:
+            1. Review the issues listed above.
+            2. Make the necessary changes to your pull request.
+            3. Push your changes to update the pull request.
+            
+            Once the issues are resolved, we'll review your pull request again. If you have any questions, please don't hesitate to ask.
+            
+            Thank you for your understanding and cooperation!
 
