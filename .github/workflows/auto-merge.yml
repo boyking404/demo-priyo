@@ -9,6 +9,8 @@ on:
     - cron: '0 6 * * *'  # 12 PM midnight in IST (6:00 UTC)
     - cron: '0 12 * * *'   # 6 PM afternoon in IST (12:00 UTC)
 
+  workflow_dispatch:  # Allow manual triggering
+
 permissions:
   contents: read
   pull-requests: write
@@ -18,10 +20,15 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
     steps:
-      - name: Check for open PRs
-        id: check_prs
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      
+      - name: Get open PRs
+        id: get_prs
         run: |
-          PR_COUNT=$(gh pr list --state open --json number | jq length)
+          PR_LIST=$(gh pr list --state open --json number --jq '.[].number')
+          echo "pr_list=$PR_LIST" >> $GITHUB_OUTPUT
+          PR_COUNT=$(echo "$PR_LIST" | wc -w)
           echo "pr_count=$PR_COUNT" >> $GITHUB_OUTPUT
           if [ "$PR_COUNT" -eq 0 ]; then
             echo "No open PRs found. Exiting workflow."
@@ -30,66 +37,84 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PAT }}
 
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
-      - name: Check PR structure and rules
-        id: check_pr
+      - name: Process PRs
+        if: steps.get_prs.outputs.pr_count > 0
         run: |
-          PR_FILES=$(gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path')
-          PR_CHANGES=$(gh pr view ${{ github.event.pull_request.number }} --json additions,deletions --jq '(.additions + .deletions)')
-          FILE_COUNT=$(echo "$PR_FILES" | wc -l)
-          VALID=true
-          REASONS=""
-          
-          # Check if all files are within a single directory in the root
-          ROOT_DIR=$(echo "$PR_FILES" | cut -d'/' -f1 | sort -u)
-          if [ $(echo "$ROOT_DIR" | wc -l) -ne 1 ] || [ -z "$ROOT_DIR" ] || [ "$ROOT_DIR" = "." ]; then
-            VALID=false
-            REASONS+="- Files are not within a single directory in the root.\n"
-          fi
-          
-          # Check if the directory name is valid (alphanumeric, hyphens, and underscores only)
-          if ! [[ $ROOT_DIR =~ ^[a-zA-Z0-9_-]+$ ]]; then
-            VALID=false
-            REASONS+="- Invalid directory name or folder structure.\n"
-          fi
-          
-          # Check for node_modules or venv folders
-          if echo "$PR_FILES" | grep -qE '(node_modules|venv)/'; then
-            VALID=false
-            REASONS+="- 'node_modules' or 'venv' folders found in the PR.\n"
-          fi
-          
-          # Check for merge conflicts
-          if gh pr view ${{ github.event.pull_request.number }} --json mergeable --jq '.mergeable' | grep -q false; then
-            VALID=false
-            REASONS+="- PR has merge conflicts.\n"
-          fi
-          
-          # Check for spaces at the beginning or end of folder names
-          if echo "$PR_FILES" | grep -qE '(^| )/| /|/ |/$'; then
-            VALID=false
-            REASONS+="- Spaces found at the beginning or end of folder names in file paths.\n"
-          fi
+          for PR_NUMBER in ${{ steps.get_prs.outputs.pr_list }}; do
+            echo "Processing PR #$PR_NUMBER"
 
-          # Check for absence of .py files and presence of web-related files
-          if echo "$PR_FILES" | grep -qE '\.py$'; then
-            VALID=false
-          fi
-          if ! echo "$PR_FILES" | grep -qE '\.(html|css|js|jsx|ts|tsx)$'; then
-            VALID=false
-          fi
-          
-          # Check for minimum 300 lines changed and maximum 100 files (no comment added)
-          if [ $PR_CHANGES -lt 10 ] || [ $FILE_COUNT -gt 100 ]; then
-            VALID=false
-          fi
-          
-          echo "::set-output name=valid::$VALID"
-          echo "::set-output name=reasons::$REASONS"
-          echo "VALID: $VALID"
-          echo "REASONS: $REASONS"
+            # Add "open-odyssey" label to all PRs
+            gh pr edit $PR_NUMBER --add-label "open-odyssey"
+            
+            # Check PR structure and rules
+            PR_FILES=$(gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path')
+            PR_CHANGES=$(gh pr view ${{ github.event.pull_request.number }} --json additions,deletions --jq '(.additions + .deletions)')
+            FILE_COUNT=$(echo "$PR_FILES" | wc -l)
+            VALID=true
+            REASONS=""
+
+            # Check if all files are within a single directory in the root
+            ROOT_DIR=$(echo "$PR_FILES" | cut -d'/' -f1 | sort -u)
+            if [ $(echo "$ROOT_DIR" | wc -l) -ne 1 ] || [ -z "$ROOT_DIR" ] || [ "$ROOT_DIR" = "." ]; then
+              VALID=false
+              REASONS+="- Files are not within a single directory in the root.\n"
+            fi
+
+            # Check if the directory name is valid (alphanumeric, hyphens, and underscores only)
+            if ! [[ $ROOT_DIR =~ ^[a-zA-Z0-9_-]+$ ]]; then
+              VALID=false
+              REASONS+="- Invalid directory name or folder structure.\n"
+            fi
+
+            # Check for node_modules or venv folders
+            if echo "$PR_FILES" | grep -qE '(node_modules|venv)/'; then
+              VALID=false
+              REASONS+="- 'node_modules' or 'venv' folders found in the PR.\n"
+            fi
+
+            # Check for merge conflicts
+            if gh pr view ${{ github.event.pull_request.number }} --json mergeable --jq '.mergeable' | grep -q false; then
+              VALID=false
+              REASONS+="- PR has merge conflicts.\n"
+            fi
+
+            # Check for spaces at the beginning or end of folder names
+            if echo "$PR_FILES" | grep -qE '(^| )/| /|/ |/$'; then
+              VALID=false
+              REASONS+="- Spaces found at the beginning or end of folder names in file paths.\n"
+            fi
+
+            # Check for absence of .py files and presence of web-related files
+            if echo "$PR_FILES" | grep -qE '\.py$'; then
+              VALID=false
+            fi
+            if ! echo "$PR_FILES" | grep -qE '\.(html|css|js|jsx|ts|tsx)$'; then
+              VALID=false
+            fi
+
+            # Check for minimum 300 lines changed and maximum 100 files (no comment added)
+            if [ $PR_CHANGES -lt 10 ] || [ $FILE_COUNT -gt 100 ]; then
+              VALID=false
+            fi
+
+            if [ "$VALID" = true ]; then
+              echo "PR #$PR_NUMBER is valid. Attempting to merge."
+              if gh pr view $PR_NUMBER --json labels --jq '.labels[].name' | grep -q "waiting room"; then
+                echo "Removing 'waiting room' label"
+                gh pr edit $PR_NUMBER --remove-label "waiting room"
+              fi
+              gh pr edit $PR_NUMBER --add-label "dino-accepted"
+              gh pr merge $PR_NUMBER --auto --merge
+            else
+              echo "PR #$PR_NUMBER is invalid. Adding comment and label."
+              gh pr edit $PR_NUMBER --add-label "waiting room"
+              REASONS=$(echo -e "$REASONS" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+              gh pr comment $PR_NUMBER --body-file - <<EOF
+            This pull request does not meet the required structure or rules. Please address the following issues:
+            $REASONS
+            EOF
+            fi
+          done  
         env:
           GH_TOKEN: ${{ secrets.PAT }}
 
